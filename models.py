@@ -14,7 +14,7 @@ class MLP(torch.nn.Module):
  
         self.num_layers = len(layers)
         self.layers = nn.ModuleList()
-        
+         
         self.layers.append(nn.Linear(in_featuers,layers[0]))
         for i in range(self.num_layers-1) :
             self.layers.append(nn.Linear(layers[i],layers[i+1]))
