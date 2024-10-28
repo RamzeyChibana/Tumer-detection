@@ -18,15 +18,16 @@ class MLP(torch.nn.Module):
         self.layers.append(nn.Linear(in_featuers,layers[0]))
         for i in range(self.num_layers-1) :
             self.layers.append(nn.Linear(layers[i],layers[i+1]))
+        self.out_layer = nn.Linear(layers[-1],n_classes)
         self.activation = nn.ReLU()
         self.drop = nn.Dropout(dropout_rate)
 
     def forward(self,x):
+    
+        for i,layer in enumerate(self.layers):
+            x = self.drop(self.activation(layer(x)))
 
-        for i in range(self.num_layers-1):
-            x = self.drop(self.activation(self.layers[i](x)))
-
-        out = self.layers[self.num_layers-1](x)
+        out = self.out_layer(x)
 
         return out
 
