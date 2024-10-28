@@ -39,10 +39,10 @@ important arguments for **main.py** :
 |—— Experiments
 |—— main.py
 |—— models.py
-|—— test.ipynb
 |—— Tr-no_0011.jpg
 |—— utils
 |    |—— DataPre.py
 |    |—— load_data.py
 |    |—— parser.py
+|___
 ```
