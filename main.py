@@ -14,7 +14,7 @@ import json
 import argparse
 from tqdm import tqdm
 
-
+from time import time
 
 
 
@@ -55,8 +55,9 @@ learning_rate = args.learning_rate
 layers = args.layers
 dropout = args.dropout
 model_name = args.model
-
-
+rows = args.rows
+columns = args.columns
+num_bins = args.bins
 
 
 
@@ -64,6 +65,7 @@ model_name = args.model
 def get_files(path):
     categories = os.listdir(path)
     categories_map = {category:i for i,category in enumerate(categories)}
+   
     files = []
     labels = []
     for category in categories :
@@ -86,27 +88,24 @@ def split_data(data,labels,test_size=0.2,random_state=18):
 
 
 training_data,training_labels,classes = get_files("D:\df\\ai\mri\Training")
-testing_data,testing_labels,classes = get_files("D:\df\\ai\mri\Testing")
 
 
 training_data, val_data , training_labels , val_labels = split_data(training_data,training_labels,test_size=0.1)
 num_train = len(training_data)
 num_val = len(val_data)
-num_test = len(testing_data)
+print(f"num_train :{num_train}")
+print(f"num_val :{num_val}")
 
 
-rows , columns , num_bins = 3,3,10
 csv_columns = ["Epoch","loss","val_loss","acc","val_acc","f1","val_f1"] 
 transform = Transform(rows,columns,num_bins)
 
 train_dataset = BrainDataset(training_data,training_labels,device,transform=transform)
 val_dataset = BrainDataset(val_data,val_labels,device,transform=transform)
-test_dataset = BrainDataset(testing_data,testing_labels,device,transform=transform)
 
  
 train_loader = DataLoader(train_dataset,batch_size=batch_size)
 val_loader = DataLoader(val_dataset,batch_size=batch_size)
-test_loader = DataLoader(test_dataset,batch_size=batch_size)
 
 
 
@@ -122,7 +121,7 @@ if model_name.lower() == "cnn":
 optimizer = torch.optim.Adam(model.parameters(),learning_rate)
 
 if new :
-    epoch = 0
+    iepoch = 0
     best_val = np.inf
     csv_file =  open(os.path.join("Experiments",f"{exp_dir}","history.csv"),"w",newline="")
     writer  = csv.writer(csv_file)
@@ -130,86 +129,113 @@ if new :
 else :
     checkpoint = torch.load(f"Experiments/{exp_dir}/last_checkpoint.pth")
     csv_file =  open(os.path.join("Experiments",f"{exp_dir}","history.csv"),"a",newline="")
-    model.load_state_dict(torch.load(f"Experiments/{exp_dir}/last_weights.pt"))
+    model.load_state_dict(torch.load(f"Experiments/{exp_dir}/last_weights.pt",weights_only=True))
     optimizer.load_state_dict(checkpoint["optimizer_state"])
-    epoch = checkpoint["epoch"]
-    loss = checkpoint["loss"]
+    iepoch = checkpoint["epoch"]+1
     best_val = checkpoint["best_val"]
 
         
-
-
 def evaluate(model:torch.nn.Module,loader):
     preds = []
     actual = []
+    cuda_time = 0
+    feed_time = 0
+    max_time = 0
+    torch.cuda.synchronize()
+    t = time()
     with torch.no_grad():
         for data,labels in loader:
-            out = model(data)
-            preds.extend(list(np.argmax(out.cpu().numpy(),axis=1)))
-            actual.extend(list(labels.cpu().numpy()))
-    acc = accuracy_score(actual,preds)
-    f1 = f1_score(actual,preds)
-    return acc, f1
-
-def train():
-
-    loss_fn = torch.nn.CrossEntropyLoss()
-    for epoch in range(NUM_EPOCHS):
-        train_loss = []
-        val_loss = []
-        pbar = tqdm(total=num_train)
-        pbar.set_description(f"Epoch {epoch}:")
-        for data,labels in train_loader:
-            #feed forward
+            torch.cuda.synchronize()
+            t1 = time()
             data = data.to(device)
             labels = labels.to(device)
-            optimizer.zero_grad()
-            
+            torch.cuda.synchronize()
+            t2 = time()
+            out = model(data)
+            torch.cuda.synchronize()
+            t3 = time()
+            preds.append(torch.argmax(out,dim=1))
+            actual.append(torch.argmax(labels,dim=1))
+            torch.cuda.synchronize()
+            t4 = time()
+            cuda_time +=t2 - t1
+            feed_time +=t3 - t2 
+            max_time += t4 - t3 
+
+    torch.cuda.synchronize()
+    t_end = time()
+    cuda_time =cuda_time / t_end - t
+    feed_time =feed_time / t_end - t 
+    max_time =max_time /  t_end - t 
+
+    preds = torch.cat(preds,dim=0)
+    actual = torch.cat(actual,dim=0)
+    print(f"testing :cuda :{cuda_time}\tfeed :{feed_time}\targmax :{max_time}")
+    preds = list(preds.cpu().numpy())
+    actual = list(actual.cpu().numpy())
+
+    acc = accuracy_score(actual,preds)
+    f1 = f1_score(actual,preds,average="macro")
+ 
+    return acc, f1
+
+loss_fn = torch.nn.CrossEntropyLoss()
+for epoch in range(iepoch,NUM_EPOCHS):
+    train_loss = []
+    val_loss = []
+    pbar = tqdm(total=num_train)
+    pbar.set_description(f"Epoch {epoch}:")
+    for data,labels in train_loader:
+        #feed forward
+        data = data.to(device)
+        labels = labels.to(device)
+        optimizer.zero_grad()
+        
+        out = model(data)
+        loss = loss_fn(out,labels)
+        # backward
+        train_loss.append(float(loss))
+        loss.backward()
+        optimizer.step()
+        pbar.update(batch_size)
+
+    for data,labels in val_loader:
+        #feed forward
+        with torch.no_grad() :
+            data = data.to(device)
+            labels = labels.to(device)
             out = model(data)
             loss = loss_fn(out,labels)
-            # backward
-            train_loss.append(float(loss))
-            loss.backward()
-            optimizer.step()
-            pbar.update(batch_size)
+            val_loss.append(float(loss))
 
-        for data,labels in val_loader:
-            #feed forward
-            with torch.no_grad() :
-                out = model(data)
-                loss = loss_fn(out,labels)
-                val_loss.append(float(loss))
-
-            
-        pbar.close()
-        val_acc , val_f1 = evaluate(model,val_loader)
-        train_acc , train_f1 = evaluate(model,train_loader)
         
+    pbar.close()
+    val_acc , val_f1 = evaluate(model,val_loader)
+    train_acc , train_f1 = evaluate(model,train_loader)
+    train_loss = np.mean(train_loss)
+    val_loss = np.mean(val_loss)
+    
+    if val_loss < best_val :
+        best_val = val_loss
+        torch.save(model.state_dict(),f"Experiments/{exp_dir}/best_weights.pt")
+    
+    checkpoint = {
+    "epoch":epoch,
+    "optimizer_state":optimizer.state_dict(),
+    "best_val":best_val
+    }
+    torch.save(checkpoint,f"Experiments/{exp_dir}/last_checkpoint.pth")
+    torch.save(model.state_dict(),f"Experiments/{exp_dir}/last_weights.pt")
+    loss_verbose = f"Epoch {epoch}:loss=[{np.mean(train_loss):.3f}],val loss={np.mean(val_loss):.3f}"
+    eval_verbose = f"acc:{train_acc} , f1:{train_f1} | val acc:{val_acc} , val_f1:{val_f1}"
 
-        if val_loss < best_val :
-            best_val = val_loss
-            torch.save(model.state_dict(),f"Experiments/{exp_dir}/best_weights.pt")
-        
-        checkpoint = {
-        "epoch":epoch,
-        "optimizer_state":optimizer.state_dict(),
-        "best_val":best_val
-        }
-        torch.save(checkpoint,f"Experiments/{exp_dir}/last_checkpoint.pth")
-        torch.save(model.state_dict(),f"Experiments/{exp_dir}/last_weights.pt")
-        loss_verbose = f"Epoch {epoch}:loss=[{np.mean(train_loss):.3f}],val loss={np.mean(val_loss):.3f}"
-        eval_verbose = f"acc:{train_acc} , f1:{train_f1} | val acc:{val_acc} , val_f1:{val_f1}"
+    if verbose > 0:
+        print(loss_verbose,end="\t")
 
-        if verbose > 0:
-            print(loss_verbose)
-
-        if verbose > 1 :
-            print(eval_verbose)
-        
-        writer.writerow([epoch,loss,val_loss,train_acc,val_acc,train_f1,val_f1])
-
-train()
-
+    if verbose > 1 :
+        print(eval_verbose)
+    print()
+    writer.writerow([epoch,train_loss,val_loss,train_acc,val_acc,train_f1,val_f1])
 
 
 

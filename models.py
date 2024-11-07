@@ -25,11 +25,14 @@ class MLP(torch.nn.Module):
     def forward(self,x):
     
         for i,layer in enumerate(self.layers):
-            x = self.drop(self.activation(layer(x)))
-
+            x = self.activation(layer(x))
+        x = self.drop(x)
         out = self.out_layer(x)
 
         return out
+    
+
+
 
 
 

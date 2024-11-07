@@ -42,7 +42,7 @@ def get_frequency(image:np.array,num_bins):
         bin_freq[i] = np.sum(freq[i*bins_range:i*bins_range+bins_range]) # sliding window (window size = bins_range) step = bins_range
     
     i=num_bins-1
-    bin_freq[-1]=np.sum(freq[i*bins_range:i*bins_range+bins_range])
+    bin_freq[-1]=np.sum(freq[i*bins_range:])
     
     return bin_freq
 

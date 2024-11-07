@@ -2,9 +2,10 @@ import argparse
 
 
 
+
 def train_parse():
     parse = argparse.ArgumentParser(description="Train Model")
-    parse.add_argument('-b',"--batch_size",type=int,default=16,help="batch size")
+    parse.add_argument('-bs',"--batch_size",type=int,default=16,help="batch size")
     parse.add_argument('-dv',"--device",default="gpu",help="device")
     parse.add_argument('-v',"--verbose",default=1,type=int,help="device")
     parse.add_argument('-ep',"--epochs",type=int,default=10,help="how many epochs ")
@@ -14,7 +15,9 @@ def train_parse():
     parse.add_argument("-ex","--exp",type=int,default=None,help="start new training or continue experiment")
     parse.add_argument("-m","--model",default="MLP",choices=["MLP","CNN"])
     parse.add_argument("-dt","--dataset",default="freq",choices=["freq","images"])
-
+    parse.add_argument('-r',"--rows",type=int,default=3,help="number of rows")
+    parse.add_argument('-c',"--columns",type=int,default=3,help="number of columns")
+    parse.add_argument('-b',"--bins",default=30,type=int,help="number of beans")
     return parse
 
 
