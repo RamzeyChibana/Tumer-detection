@@ -13,7 +13,7 @@ import csv
 import json
 import argparse
 from tqdm import tqdm
-
+import torch.nn as nn
 from time import time
 
 
@@ -41,6 +41,7 @@ exp_dir = f"exp_{exp}"
 if exp_dir in exps:
     print("\t\tContinue Training..")
     args = load_args(os.path.join("Experiments",f"{exp_dir}","args.json"))
+    checkpoint = torch.load(f"Experiments/{exp_dir}/last_checkpoint.pth")
     new = False
 
 else :
@@ -71,11 +72,9 @@ def get_files(path):
     for category in categories :
         for file in os.listdir(os.path.join(path,category)):
             files.append(os.path.join(path,category,file)) 
-            one_hot = np.zeros(shape=(len(categories)))
-            one_hot[categories_map[category]]=1
-            labels.append(one_hot)
+            labels.append(categories_map[category])
     
-    return files,labels,categories
+    return files,labels
 
 
 def split_data(data,labels,test_size=0.2,random_state=18):
@@ -87,7 +86,7 @@ def split_data(data,labels,test_size=0.2,random_state=18):
 
 
 
-training_data,training_labels,classes = get_files("D:\df\\ai\mri\Training")
+training_data,training_labels = get_files("D:\df\\ai\Clean Data\clean_images")
 
 
 training_data, val_data , training_labels , val_labels = split_data(training_data,training_labels,test_size=0.1)
@@ -97,7 +96,7 @@ print(f"num_train :{num_train}")
 print(f"num_val :{num_val}")
 
 
-csv_columns = ["Epoch","loss","val_loss","acc","val_acc","f1","val_f1"] 
+csv_columns = ["Epoch","loss","val_loss","val_acc","val_f1"] 
 transform = Transform(rows,columns,num_bins)
 
 train_dataset = BrainDataset(training_data,training_labels,device,transform=transform)
@@ -111,13 +110,12 @@ val_loader = DataLoader(val_dataset,batch_size=batch_size)
 
 if model_name.lower() == "mlp":
     in_features = rows*columns*num_bins
-    num_classes = len(classes)
-    model = MLP(layers,in_features,num_classes,dropout).to(device)
+    model = MLP(layers,in_features,dropout).to(device)
 
 if model_name.lower() == "cnn":
     in_features = rows*columns*num_bins
-    num_classes = len(classes)
-    model = MLP(layers,in_features,num_classes,dropout).to(device)
+    model = MLP(layers,in_features,dropout).to(device)
+
 optimizer = torch.optim.Adam(model.parameters(),learning_rate)
 
 if new :
@@ -127,60 +125,36 @@ if new :
     writer  = csv.writer(csv_file)
     writer.writerow(csv_columns)
 else :
-    checkpoint = torch.load(f"Experiments/{exp_dir}/last_checkpoint.pth")
-    csv_file =  open(os.path.join("Experiments",f"{exp_dir}","history.csv"),"a",newline="")
+    
     model.load_state_dict(torch.load(f"Experiments/{exp_dir}/last_weights.pt",weights_only=True))
     optimizer.load_state_dict(checkpoint["optimizer_state"])
+    csv_file =  open(os.path.join("Experiments",f"{exp_dir}","history.csv"),"a",newline="")
     iepoch = checkpoint["epoch"]+1
     best_val = checkpoint["best_val"]
-
+    writer = csv.writer(csv_file)
         
 def evaluate(model:torch.nn.Module,loader):
+    model.eval()
     preds = []
-    actual = []
-    cuda_time = 0
-    feed_time = 0
-    max_time = 0
-    torch.cuda.synchronize()
-    t = time()
-    with torch.no_grad():
-        for data,labels in loader:
-            torch.cuda.synchronize()
-            t1 = time()
-            data = data.to(device)
-            labels = labels.to(device)
-            torch.cuda.synchronize()
-            t2 = time()
-            out = model(data)
-            torch.cuda.synchronize()
-            t3 = time()
-            preds.append(torch.argmax(out,dim=1))
-            actual.append(torch.argmax(labels,dim=1))
-            torch.cuda.synchronize()
-            t4 = time()
-            cuda_time +=t2 - t1
-            feed_time +=t3 - t2 
-            max_time += t4 - t3 
+    real = []
 
-    torch.cuda.synchronize()
-    t_end = time()
-    cuda_time =cuda_time / t_end - t
-    feed_time =feed_time / t_end - t 
-    max_time =max_time /  t_end - t 
+    with torch.no_grad() :
+        for x , y in loader :
+            x = x.to(device)
+            out = model(x)
+            out = out.to("cpu").numpy()
 
-    preds = torch.cat(preds,dim=0)
-    actual = torch.cat(actual,dim=0)
-    print(f"testing :cuda :{cuda_time}\tfeed :{feed_time}\targmax :{max_time}")
-    preds = list(preds.cpu().numpy())
-    actual = list(actual.cpu().numpy())
-
-    acc = accuracy_score(actual,preds)
-    f1 = f1_score(actual,preds,average="macro")
+            pred = [0 if i<0.5 else 1 for i in out ]
+            preds +=pred
+            real += list(y)
+    
+    f1 = f1_score(preds,real)
+    acc = accuracy_score(preds,real)
  
     return acc, f1
 
-loss_fn = torch.nn.CrossEntropyLoss()
-for epoch in range(iepoch,NUM_EPOCHS):
+loss_fn = nn.BCELoss()
+for epoch in range(iepoch,iepoch+NUM_EPOCHS):
     train_loss = []
     val_loss = []
     pbar = tqdm(total=num_train)
@@ -192,7 +166,7 @@ for epoch in range(iepoch,NUM_EPOCHS):
         optimizer.zero_grad()
         
         out = model(data)
-        loss = loss_fn(out,labels)
+        loss = loss_fn(out.view(-1),labels)
         # backward
         train_loss.append(float(loss))
         loss.backward()
@@ -205,13 +179,12 @@ for epoch in range(iepoch,NUM_EPOCHS):
             data = data.to(device)
             labels = labels.to(device)
             out = model(data)
-            loss = loss_fn(out,labels)
+            loss = loss_fn(out.view(-1),labels)
             val_loss.append(float(loss))
 
         
     pbar.close()
     val_acc , val_f1 = evaluate(model,val_loader)
-    train_acc , train_f1 = evaluate(model,train_loader)
     train_loss = np.mean(train_loss)
     val_loss = np.mean(val_loss)
     
@@ -227,7 +200,7 @@ for epoch in range(iepoch,NUM_EPOCHS):
     torch.save(checkpoint,f"Experiments/{exp_dir}/last_checkpoint.pth")
     torch.save(model.state_dict(),f"Experiments/{exp_dir}/last_weights.pt")
     loss_verbose = f"Epoch {epoch}:loss=[{np.mean(train_loss):.3f}],val loss={np.mean(val_loss):.3f}"
-    eval_verbose = f"acc:{train_acc} , f1:{train_f1} | val acc:{val_acc} , val_f1:{val_f1}"
+    eval_verbose = f"val acc:{val_acc} , val_f1:{val_f1}"
 
     if verbose > 0:
         print(loss_verbose,end="\t")
@@ -235,7 +208,7 @@ for epoch in range(iepoch,NUM_EPOCHS):
     if verbose > 1 :
         print(eval_verbose)
     print()
-    writer.writerow([epoch,train_loss,val_loss,train_acc,val_acc,train_f1,val_f1])
+    writer.writerow([epoch,train_loss,val_loss,val_acc,val_f1])
 
 
 

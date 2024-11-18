@@ -1,0 +1,19 @@
+{
+    "batch_size": 32,
+    "device": "gpu",
+    "verbose": 2,
+    "epochs": 5,
+    "dropout": 0.4,
+    "learning_rate": 0.001,
+    "layers": [
+        512,
+        512,
+        1024
+    ],
+    "exp": null,
+    "model": "MLP",
+    "dataset": "freq",
+    "rows": 3,
+    "columns": 3,
+    "bins": 255
+}

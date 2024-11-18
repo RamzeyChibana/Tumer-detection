@@ -24,9 +24,11 @@ class BrainDataset(Dataset):
         if self.transform :
             image = self.transform(image)
         
-        image = torch.tensor(image,dtype=torch.float32)
         
-        return image,self.labels[idx]
+        image = torch.tensor(image,dtype=torch.float32)
+        label = torch.tensor(self.labels[idx],dtype = torch.float32)
+        
+        return image,label
 
 class Transform:
     def __init__(self, rows, columns, num_bins):
