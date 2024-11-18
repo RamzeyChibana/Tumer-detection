@@ -11,7 +11,7 @@ This repository is dedicated to experimenting with various models and techniques
 ## Dataset Preparation
 | Dataset | link |
 | ---     | ---   |
-| Brain Tumor MRI Dataset | [visit](https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset) |
+| Brain Tumor MRI Dataset | [visit](https://drive.google.com/file/d/1ciJ0qX-YOVXc7oLWTQhqR3avy2iOuC-l/view?usp=sharing) |
 
 
 ## Use
