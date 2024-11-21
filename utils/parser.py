@@ -23,8 +23,8 @@ def train_parse():
 
 def test_parse():
     parse = argparse.ArgumentParser(description="Test experiment")
+    parse.add_argument('-dv',"--device",default="gpu",help="device")
     parse.add_argument('-b',"--batch_size",type=int,default=16,help="batch size")
-    parse.add_argument('-dv',"--device",type=int,default="gpu",help="device")
     parse.add_argument("-ex","--exp",type=int,default=None,help="start new training or continue experiment")
     return parse
 
