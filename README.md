@@ -1,4 +1,4 @@
-Title
+Tumer-detection
 ===
 This repository is dedicated to experimenting with various models and techniques for predicting outcomes from medical images. It includes multiple approaches to preprocessing, training, and evaluating models for enhanced prediction accuracy.
 
