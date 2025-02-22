@@ -1,6 +1,6 @@
 Tumer-detection
 ===
-This repository is dedicated to experimenting with various models and techniques for predicting outcomes from medical images. It includes multiple approaches to preprocessing, training, and evaluating models for enhanced prediction accuracy.
+The repository focuses on detecting brain tumors from medical images using a combination of image descriptors and deep learning techniques. It incorporates various image preprocessing methods to extract relevant features and applies deep learning models for accurate tumor detection
 
 
 ## Install & Dependence
